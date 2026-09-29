@@ -345,6 +345,20 @@
       if (a) a.textContent = 'Suara: ' + (on ? 'ON' : 'OFF');
       if (b) b.textContent = 'Suara: ' + (on ? 'ON' : 'OFF');
     },
+
+    setFullscreenLabel(on) {
+      const t = 'Layar Penuh: ' + (on ? 'ON' : 'OFF');
+      const a = this.get('btn-full');
+      const b = this.get('btn-full2');
+      if (a) {
+        a.textContent = t;
+        a.classList.toggle('on', !!on);
+      }
+      if (b) {
+        b.textContent = t;
+        b.classList.toggle('on', !!on);
+      }
+    },
   };
 
   global.UI = UI;

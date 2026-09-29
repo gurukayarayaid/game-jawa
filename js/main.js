@@ -228,6 +228,7 @@
     applyMode();
     UI.setNames(settings.p1, settings.p2);
     UI.setSoundLabel(settings.sound);
+    UI.setFullscreenLabel(isFullscreen());
     Sfx.enabled = !!settings.sound;
   }
 
@@ -250,11 +251,33 @@
     });
   }
 
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
   function toggleFullscreen() {
     try {
-      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-      else document.exitFullscreen();
-    } catch (e) {}
+      if (!isFullscreen()) {
+        const el = document.documentElement;
+        const req = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (!req) {
+          UI.showToast('Mode layar penuh tidak didukung browser ini');
+          return;
+        }
+        const p = req.call(el);
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => UI.showToast('Layar penuh diblokir browser'));
+        }
+      } else {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) {
+          const p = exit.call(document);
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        }
+      }
+    } catch (e) {
+      UI.showToast('Layar penuh tidak tersedia');
+    }
   }
 
   function toggleSound() {
@@ -333,6 +356,7 @@
     on('btn-recal', () => Wizard.start());
     on('btn-cal-skip', () => Wizard.skip());
     on('btn-full', toggleFullscreen);
+    on('btn-full2', toggleFullscreen);
     on('btn-sound', toggleSound);
     on('btn-mute2', toggleSound);
     on('btn-start', startGame);
@@ -361,12 +385,15 @@
       UI.measureCursors();
       Game.refreshArena();
     });
-    document.addEventListener('fullscreenchange', () => {
+    const onFsChange = () => {
+      UI.setFullscreenLabel(isFullscreen());
       setTimeout(() => {
         UI.measureCursors();
         Game.refreshArena();
       }, 120);
-    });
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
   }
 
   function frame(now) {

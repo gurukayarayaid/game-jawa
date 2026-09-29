@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Gesture Battle Aksara Jawa</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <section id="screen-menu" class="screen active">
+    <div class="menu-wrap">
+      <header class="brand">
+        <div class="brand-glyphs" id="brand-glyphs"></div>
+        <h1>Gesture Battle<span>Aksara Jawa</span></h1>
+        <p class="tagline">Dua murid, dua telunjuk, rebutan jawaban!</p>
+      </header>
+
+      <div class="menu-grid">
+        <div class="panel">
+          <h2>Pemain</h2>
+          <label class="field row">
+            <span class="swatch s1"></span>
+            <input id="in-p1" maxlength="16" value="Pemain 1" autocomplete="off">
+          </label>
+          <label class="field row" id="row-p2">
+            <span class="swatch s2"></span>
+            <input id="in-p2" maxlength="16" value="Pemain 2" autocomplete="off">
+          </label>
+
+          <h2>Aturan Main</h2>
+          <div class="field row">
+            <span>Mode</span>
+            <div class="segmented" id="seg-mode">
+              <button type="button" data-v="1p">1 Pemain</button>
+              <button type="button" data-v="2p" class="on">2 Pemain</button>
+            </div>
+          </div>
+          <div class="field row">
+            <span>Tingkat</span>
+            <div class="segmented" id="seg-level">
+              <button type="button" data-v="mudah">Mudah</button>
+              <button type="button" data-v="sedang" class="on">Sedang</button>
+              <button type="button" data-v="sulit">Sulit</button>
+            </div>
+          </div>
+          <div class="field row">
+            <span>Ronde</span>
+            <div class="segmented" id="seg-rounds">
+              <button type="button" data-v="5">5</button>
+              <button type="button" data-v="10" class="on">10</button>
+              <button type="button" data-v="15">15</button>
+              <button type="button" data-v="20">20</button>
+            </div>
+          </div>
+          <div class="field row">
+            <span>Tahan jari</span>
+            <input type="range" id="in-dwell" min="400" max="1200" step="50" value="700">
+            <b class="num" id="lbl-dwell">700 ms</b>
+          </div>
+        </div>
+
+        <div class="panel panel-cam">
+          <h2>Kamera &amp; Gesture <span id="cam-status" class="status loading">memuat…</span></h2>
+          <div id="cam-home">
+            <div class="cam-box" id="cam-box">
+              <video id="cam" playsinline muted></video>
+              <canvas id="cam-overlay"></canvas>
+              <div class="cam-hint" id="cam-hint">Arahkan telunjuk ke layar untuk menguji gesture</div>
+            </div>
+          </div>
+          <div class="cam-controls">
+            <select id="sel-cam" title="Pilih kamera"><option value="">kamera default</option></select>
+            <button type="button" id="btn-recal" class="btn ghost">Kalibrasi Gerak</button>
+            <label class="check"><input type="checkbox" id="ck-mirror" checked> Cermin</label>
+            <label class="check grow">Sensitivitas
+              <input type="range" id="in-gain" min="0.6" max="1.6" step="0.05" value="1">
+            </label>
+          </div>
+          <div class="hand-status">
+            <div class="hs s1" id="hs-1"><b id="hs-name-1">Pemain 1</b><span id="hs-txt-1">menunggu tangan…</span></div>
+            <div class="hs s2" id="hs-2"><b id="hs-name-2">Pemain 2</b><span id="hs-txt-2">menunggu tangan…</span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Cara Main</h2>
+          <ol class="how">
+            <li><i>1</i> Murid berdiri sekitar 2–4 m di depan layar.</li>
+            <li><i>2</i> Angkat <b>telunjuk</b>, arahkan ke jawaban yang dipilih.</li>
+            <li><i>3</i> <b>Tahan</b> sampai lingkaran penuh untuk memilih.</li>
+            <li><i>4</i> Telapak terbuka = istirahat, kepal = batalkan pilihan.</li>
+            <li><i>5</i> Tanpa kamera? Jawab dengan <b>menyentuh</b> layar.</li>
+          </ol>
+          <div class="gesture-demo">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <g class="hand-outline">
+                <path d="M46 104c-12-6-20-18-22-32l-4-24c-1-7 8-10 11-3l6 16V34c0-7 10-7 10 0v26h3V26c0-7 10-7 10 0v34h3V32c0-7 10-7 10 0v28h3V44c0-7 10-7 10 0v34c0 16-8 26-20 30z"/>
+              </g>
+              <g class="hand-ray"><path d="M74 26 L96 12"/><path d="M78 36 L104 30"/><path d="M76 46 L102 52"/></g>
+            </svg>
+            <p>Tunjuk dari jauh, jangan menutupi layar.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="menu-actions">
+        <button type="button" id="btn-full" class="btn ghost">Layar Penuh</button>
+        <button type="button" id="btn-start" class="btn big">MULAI BATTLE</button>
+        <button type="button" id="btn-sound" class="btn ghost">Suara: ON</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-game" class="screen">
+    <div class="topbar">
+      <div class="scoreboard s1" id="sb-1">
+        <div class="sb-name" id="sb-name-1">Pemain 1</div>
+        <div class="sb-score" id="sb-score-1">0</div>
+        <div class="sb-meta"><span id="sb-win-1">0 menang</span><span class="sb-hand" id="sb-hand-1">hand off</span></div>
+      </div>
+
+      <div class="question" id="question">
+        <div class="q-label">SOAL RONDE <b id="q-round">1</b></div>
+        <div class="q-row">
+          <div class="q-main" id="q-main">?</div>
+          <div class="q-hint" id="q-hint">Pilih aksaranya</div>
+        </div>
+      </div>
+
+      <div class="scoreboard s2" id="sb-2">
+        <div class="sb-name" id="sb-name-2">Pemain 2</div>
+        <div class="sb-score" id="sb-score-2">0</div>
+        <div class="sb-meta"><span id="sb-win-2">0 menang</span><span class="sb-hand" id="sb-hand-2">hand off</span></div>
+      </div>
+    </div>
+
+    <div class="arena" id="arena">
+      <div id="options"></div>
+      <div id="fx"></div>
+    </div>
+
+    <div class="bottombar">
+      <div class="round-info">Ronde <b id="rd-now">1</b><span>/</span><b id="rd-total">10</b></div>
+      <div class="timer"><div class="timer-fill" id="timer-fill"></div></div>
+      <div class="bb-btns">
+        <button type="button" id="btn-mute2" class="btn ghost sm">Suara: ON</button>
+        <button type="button" id="btn-pause" class="btn ghost sm">Jeda</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="ov-count"><div class="count-num" id="count-num">3</div></div>
+    <div class="overlay flash" id="ov-flash"><div class="flash-card" id="flash-card"><b id="flash-title"></b><span id="flash-sub"></span></div></div>
+    <div class="overlay" id="ov-pause">
+      <div class="dialog">
+        <h2>Jeda</h2>
+        <div id="cam-pause-home" class="cam-home-pause"></div>
+        <div class="dialog-actions">
+          <button type="button" id="btn-resume" class="btn">Lanjut</button>
+          <button type="button" id="btn-to-menu" class="btn ghost">Menu Utama</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-final" class="screen">
+    <div class="final-wrap">
+      <div class="trophy" id="trophy">🏆</div>
+      <h2 id="final-title">Pemenang</h2>
+      <div class="final-scores">
+        <div class="fs s1"><span id="fs-name-1">Pemain 1</span><b id="fs-score-1">0</b><i id="fs-win-1">0 ronde menang</i></div>
+        <div class="fs-vs">VS</div>
+        <div class="fs s2"><span id="fs-name-2">Pemain 2</span><b id="fs-score-2">0</b><i id="fs-win-2">0 ronde menang</i></div>
+      </div>
+      <div class="final-actions">
+        <button type="button" id="btn-again" class="btn big">MAIN LAGI</button>
+        <button type="button" id="btn-menu2" class="btn ghost">Menu Utama</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="overlay" id="ov-cal">
+    <div class="cal-wrap">
+      <h2 id="cal-title">Kalibrasi Gerak</h2>
+      <p id="cal-text">Mengarah ke titik…</p>
+      <div class="cal-target" id="cal-target"><span class="cal-ring"></span></div>
+      <div class="cal-progress"><div id="cal-progress-fill"></div></div>
+      <div class="dialog-actions">
+        <button type="button" id="btn-cal-skip" class="btn ghost sm">Lewati</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="cursor-layer" aria-hidden="true">
+    <div class="cursor c1" id="cur-1">
+      <svg viewBox="0 0 100 100"><circle class="c-bg" cx="50" cy="50" r="44"/><circle class="c-fg" cx="50" cy="50" r="44"/></svg>
+      <span class="c-dot"></span><span class="c-tag">P1</span>
+    </div>
+    <div class="cursor c2" id="cur-2">
+      <svg viewBox="0 0 100 100"><circle class="c-bg" cx="50" cy="50" r="44"/><circle class="c-fg" cx="50" cy="50" r="44"/></svg>
+      <span class="c-dot"></span><span class="c-tag">P2</span>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<script src="js/logic.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/gestures.js"></script>
+<script src="js/pointer.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

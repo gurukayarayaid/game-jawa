@@ -467,6 +467,41 @@ console.log('== processDetections mode solo ==');
   eq(out.players[2].seen, false, 'pindah 2p -> solo: pemain 2 dilepas');
 }
 
+console.log('== adaptive quality ==');
+{
+  const q = AJ.createAdaptiveQuality();
+  eq(q.width, 640, 'mulai dari kualitas terbaik');
+  eq(q.widths[0], 640, 'tier pertama 640px');
+  ok(q.widths.every((w, i) => i === 0 || w < q.widths[i - 1]), 'tier menurun dari yang terbesar');
+
+  // Biaya sedang (35ms) ada di antara low/high -> histeresis: tidak berubah.
+  for (let i = 0; i < 60; i++) q.sample(1000 + i * 100, 35);
+  eq(q.width, 640, 'biaya sedang tidak mengubah kualitas');
+  eq(q.changes, 0, 'tidak ada perubahan saat biaya sedang');
+
+  // Biaya tinggi -> turun.
+  for (let i = 0; i < 60; i++) q.sample(10000 + i * 100, 95);
+  ok(q.width < 640, `biaya tinggi menurunkan kualitas (${q.width}px)`);
+  const optim = q.width;
+
+  // Biaya tiba-tiba rendah -> naik lagi (hati-hati).
+  for (let i = 0; i < 200; i++) q.sample(30000 + i * 100, 8);
+  ok(q.width > optim, `biaya rendah menaikkan kualitas kembali (${q.width}px)`);
+
+  // Tidak pernah melewati batas tier.
+  ok(q.width >= q.widths[q.widths.length - 1] && q.width <= q.widths[0], 'selalu dalam rentang tier');
+
+  // Warmup: sampel awal tidak langsung mengubah kualitas.
+  const w = AJ.createAdaptiveQuality({ warmup: 20 });
+  for (let i = 0; i < 20; i++) w.sample(i * 10, 500);
+  eq(w.width, 640, 'saat warmup kualitas tetap');
+
+  // Reset mengembalikan ke awal.
+  q.reset();
+  eq(q.width, 640, 'reset mengembalikan kualitas terbaik');
+  eq(q.changes, 0, 'reset menghapus hitungan perubahan');
+}
+
 console.log('== finalStandings ==');
 {
   const f = AJ.finalStandings({ 1: 500, 2: 300 }, 10);

@@ -27,6 +27,7 @@
     lockUntil: { 1: 0, 2: 0 },
     wrongDone: { 1: false, 2: false },
     hover: { 1: null, 2: null },
+    hitPad: 24,
     arena: { left: 0, top: 0, width: 0, height: 0 },
     fallT: 0,
     fallSpeed: 60,
@@ -123,8 +124,11 @@
         const x0 = split ? (side === 2 ? halfW + gap / 2 : gap / 2) : 0;
         const w = split ? halfW - gap : a.width;
         const laneW = w / Math.max(1, count);
-        const size = Math.max(110, Math.min(laneW * 0.8, a.height * 0.34, 330));
-        const swayAmp = Math.min(laneW * 0.07, 46);
+      const size = Math.max(110, Math.min(laneW * 0.8, a.height * 0.34, 330));
+      const swayAmp = Math.min(laneW * 0.07, 46);
+      // Di layar besar opsi ikut membesar -> area tahan-jari ikut besar,
+      // supaya bidikan telunjuk dari jauh langsung mengunci opsi.
+      this.hitPad = Math.max(24, Math.round(size * 0.14));
         for (let i = 0; i < count; i++) {
           const el = UI.createOption(this.question, i, size);
           const baseX = x0 + i * laneW + (laneW - size) / 2;
@@ -259,7 +263,7 @@
         const active = ready && !locked;
         const px = split ? (i === 1 ? Math.min(p ? p.x : 0, mid) : Math.max(p ? p.x : 0, mid)) : p ? p.x : 0;
         const py = p ? p.y : 0;
-        const targetId = active ? AJ.hitTest(px, py, this.rects(i), 24) : null;
+        const targetId = active ? AJ.hitTest(px, py, this.rects(i), this.hitPad) : null;
         const res = AJ.updateDwell(this.dwell[i], active, targetId, dtMs);
         if (res.fired) this.select(i, res.fired);
         if (targetId) this.hover[i] = targetId;

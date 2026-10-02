@@ -38,6 +38,32 @@
     loadPromise: null,
     camPromise: null,
     frozenSince: 0,
+    worker: null,
+    workerReady: false,
+    workerTried: false,
+    workerFallbackDone: false,
+    workerCapturing: false,
+    workerBusy: false,
+    busySince: 0,
+    pendingBmp: null,
+    pendingTs: 0,
+    pendingT0: 0,
+    workerInitTimer: null,
+    _statAt: 0,
+    _resCount: 0,
+    _latMs: 0,
+    _capMs: 0,
+    _sendT0: 0,
+    _postT0: 0,
+    quality: null,
+    detQuality: 0,
+    qualityMode: 'auto',
+    captureFails: 0,
+    canvasDirty: true,
+    canvasNoRO: false,
+    cw: 0,
+    ch: 0,
+    cdpr: 0,
 
     setStatus(state, message) {
       this.state = state;
@@ -49,7 +75,8 @@
       this.video = video;
       this.canvas = canvas;
       this.setStatus('loading', 'memuat model gesture…');
-      this.loadModel().catch(() => {});
+      this.observeCanvas();
+      this.initWorker();
       try {
         await this.startCamera(this.deviceId);
         if (this.modelReady) this.setStatus('ready', 'gesture siap');
@@ -97,6 +124,288 @@
         });
       }
       return this.loadPromise;
+    },
+
+    /* ==== Deteksi di Web Worker (utama) ==== */
+    initWorker() {
+      if (this.workerTried) return;
+      this.workerTried = true;
+      const useMain = () => {
+        this.loadModel().catch(() => {});
+      };
+      if (typeof Worker === 'undefined' || typeof createImageBitmap !== 'function') {
+        useMain();
+        return;
+      }
+      let w;
+      try {
+        w = new Worker('js/hand-worker.js?v=4');
+      } catch (e) {
+        useMain();
+        return;
+      }
+      this.worker = w;
+      if (global.AJ && global.AJ.createAdaptiveQuality) {
+        this.quality = global.AJ.createAdaptiveQuality();
+        this.detQuality = this.quality.width;
+      }
+      w.onmessage = (e) => this.onWorkerMessage(e.data || {});
+      w.onerror = (ev) => this.fallbackToMainThread('worker error: ' + (ev && ev.message ? ev.message : 'script gagal'));
+      w.onmessageerror = () => this.fallbackToMainThread('pesan worker rusak');
+      try {
+        w.postMessage({ type: 'init', mpBase: MP_BASE, modelUrl: MODEL_URL });
+      } catch (e) {
+        this.fallbackToMainThread('init worker gagal');
+        return;
+      }
+      this.workerInitTimer = setTimeout(() => {
+        if (!this.workerReady) this.fallbackToMainThread('worker timeout');
+      }, 30000);
+    },
+
+    onWorkerMessage(m) {
+      if (this.workerFallbackDone) return;
+      if (m.type === 'ready') {
+        this.workerReady = true;
+        this.modelReady = true;
+        this.workerCapturing = false;
+        this.workerBusy = false;
+        this.busySince = 0;
+        if (this.workerInitTimer) {
+          clearTimeout(this.workerInitTimer);
+          this.workerInitTimer = null;
+        }
+        if (this.video && this.video.srcObject) this.setStatus('ready', 'gesture siap');
+      } else if (m.type === 'error') {
+        this.fallbackToMainThread(m.message || 'worker error');
+      } else if (m.type === 'result') {
+        this.dets = Array.isArray(m.hands) ? m.hands : [];
+        this.workerBusy = false;
+        this.busySince = 0;
+        this.lastFrameAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        this._resCount = (this._resCount || 0) + 1;
+        if (this._sendT0 && typeof performance !== 'undefined') {
+          const lat = performance.now() - this._sendT0;
+          this._latMs = this._latMs ? this._latMs * 0.75 + lat * 0.25 : lat;
+        }
+        // Kualitas adaptif: round-trip post->result mencerminkan beban mesin.
+        // Saat pengguna mengunci mode tinggi/hemat, adaptasi dilewati.
+        if (this.qualityMode === 'auto' && this.quality && this._postT0 && typeof performance !== 'undefined') {
+          const nowP = performance.now();
+          this.quality.sample(nowP, nowP - this._postT0);
+          this.detQuality = this.quality.width;
+        }
+        // Frame berikutnya sudah menunggu -> langsung kirim tanpa menunggu rAF.
+        if (this.pendingBmp) {
+          const bmp = this.pendingBmp;
+          const ts = this.pendingTs;
+          const t0 = this.pendingT0;
+          this.pendingBmp = null;
+          this.pendingTs = 0;
+          this.pendingT0 = 0;
+          if (!this.workerFallbackDone && this.workerReady && this.worker) this.sendToWorker(bmp, ts, t0);
+          else try { bmp.close(); } catch (e) {}
+        }
+      }
+    },
+
+    fallbackToMainThread(reason) {
+      if (this.workerFallbackDone) return;
+      this.workerFallbackDone = true;
+      if (this.workerInitTimer) {
+        clearTimeout(this.workerInitTimer);
+        this.workerInitTimer = null;
+      }
+      this.workerReady = false;
+      this.modelReady = false;
+      this.workerCapturing = false;
+      this.workerBusy = false;
+      this.busySince = 0;
+      if (this.pendingBmp) {
+        try { this.pendingBmp.close(); } catch (e) {}
+        this.pendingBmp = null;
+        this.pendingTs = 0;
+      }
+      this.lastVideoTime = -1;
+      this.nextDetect = 0;
+      const w = this.worker;
+      this.worker = null;
+      try {
+        if (w) w.terminate();
+      } catch (e) {}
+      console.warn('[gestures] deteksi pindah ke main thread:', reason);
+      this.loadModel().catch(() => {});
+    },
+
+    pumpWorker(nowMs) {
+      // Watchdog: inference worker tidak merespons -> pindah main thread.
+      if (this.workerBusy && this.busySince && nowMs - this.busySince > 6000) {
+        this.fallbackToMainThread('worker macet');
+        return;
+      }
+      // Satu frame sedang di-capture, atau satu frame sudah siap menunggu
+      // giliran worker (pipeline: capture & inferensi berjalan paralel).
+      if (this.workerCapturing || this.pendingBmp) return;
+      if (!this.video || this.video.currentTime === this.lastVideoTime) return;
+      if (!this.video.videoWidth) return; // frame kamera belum siap
+      this.lastVideoTime = this.video.currentTime;
+      const ts = Math.max(this.ts + 1, Math.round(nowMs));
+      this.ts = ts;
+      this.workerCapturing = true;
+      const capT0 = typeof performance !== 'undefined' ? performance.now() : nowMs;
+      // Capture TANPA opsi resize: di Chromium resize memaksa jalur CPU di
+      // main thread (menyebabkan frame patah). Downscale dilakukan di worker.
+      createImageBitmap(this.video)
+        .then((bmp) => {
+          this.workerCapturing = false;
+          if (this.workerFallbackDone || !this.workerReady || !this.worker) {
+            try { bmp.close(); } catch (e) {}
+            return;
+          }
+          this.captureFails = 0;
+          if (typeof performance !== 'undefined') {
+            const cap = performance.now() - capT0;
+            this._capMs = this._capMs ? this._capMs * 0.75 + cap * 0.25 : cap;
+          }
+          if (this.workerBusy) {
+            // Worker masih sibuk -> simpan, kirim segera saat hasil tiba.
+            this.pendingBmp = bmp;
+            this.pendingTs = ts;
+            this.pendingT0 = capT0;
+          } else {
+            this.sendToWorker(bmp, ts, capT0);
+          }
+        })
+        .catch((err) => {
+          this.workerCapturing = false;
+          // Saat kamera baru mulai, capture kadang gagal sesaat -> coba dulu
+          // beberapa kali sebelum pindah ke main thread.
+          this.captureFails = (this.captureFails || 0) + 1;
+          if (this.captureFails > 5) {
+            this.fallbackToMainThread('capture frame gagal: ' + String((err && err.message) || err));
+          }
+        });
+    },
+
+    sendToWorker(bmp, ts, t0) {
+      if (this.workerFallbackDone || !this.workerReady || !this.worker) {
+        try { bmp.close(); } catch (e) {}
+        return;
+      }
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      this._sendT0 = t0 || now;
+      this._postT0 = now;
+      this.workerBusy = true;
+      this.busySince = now;
+      const maxW = this.currentMaxW();
+      try {
+        this.worker.postMessage({ type: 'detect', bitmap: bmp, ts: ts, maxW: maxW }, [bmp]);
+      } catch (e) {
+        try { bmp.close(); } catch (e2) {}
+        this.workerBusy = false;
+        this.busySince = 0;
+        this.fallbackToMainThread('kirim frame gagal');
+      }
+    },
+
+    /* ==== Fallback: inferensi di main thread, throttle adaptif ==== */
+    detectSync(nowMs) {
+      if (!this.video || this.video.currentTime === this.lastVideoTime || nowMs < this.nextDetect) return;
+      this.lastVideoTime = this.video.currentTime;
+      this.lastFrameAt = nowMs;
+      this.ts = Math.max(this.ts + 1, Math.round(nowMs));
+      const clock = typeof performance !== 'undefined' ? () => performance.now() : () => nowMs;
+      const t0 = clock();
+      try {
+        const res = this.landmarker.detectForVideo(this.video, this.ts);
+        const lms = res.landmarks || [];
+        this.dets = lms.map((lm, i) => ({
+          lm,
+          world: res.worldLandmarks ? res.worldLandmarks[i] : null,
+          handedness: res.handedness && res.handedness[i] && res.handedness[i][0] ? res.handedness[i][0].categoryName : '',
+        }));
+      } catch (e) {
+        this.dets = [];
+      }
+      const cost = clock() - t0;
+      this._resCount = (this._resCount || 0) + 1;
+      this._latMs = this._latMs ? this._latMs * 0.75 + cost * 0.25 : cost;
+      // Sisakan minimal satu frame mulus di antara dua inferensi supaya
+      // animasi opsi jawaban tidak patah-patah di mesin yang lambat.
+      this.nextDetect = nowMs + Math.min(70, Math.max(30, Math.round(cost) + 16));
+    },
+
+    /* ==== Statistik untuk HUD (fps dihitung pemanggil) ==== */
+    getStats() {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (!this._statAt) this._statAt = now;
+      const elapsed = (now - this._statAt) / 1000;
+      const count = this._resCount || 0;
+      this._statAt = now;
+      this._resCount = 0;
+      return {
+        path: this.workerReady ? 'worker' : (this.modelReady && this.landmarker ? 'main thread' : 'belum siap'),
+        hz: elapsed > 0.05 ? Math.round((count / elapsed) * 10) / 10 : 0,
+        latMs: Math.round(this._latMs || 0),
+        capMs: Math.round(this._capMs || 0),
+        quality: this.workerReady ? this.currentMaxW() : 0,
+        qualityMode: this.qualityMode,
+      };
+    },
+
+    // 'auto' = ikuti controller adaptif; 'tinggi'/'hemat' = kunci lebar input.
+    setQualityMode(mode) {
+      this.qualityMode = mode === 'tinggi' || mode === 'hemat' ? mode : 'auto';
+      if (this.qualityMode === 'tinggi') this.detQuality = 640;
+      else if (this.qualityMode === 'hemat') this.detQuality = 320;
+      else if (this.quality) {
+        this.quality.reset();
+        this.detQuality = this.quality.width;
+      } else {
+        this.detQuality = 640;
+      }
+    },
+
+    currentMaxW() {
+      if (this.qualityMode === 'tinggi') return 640;
+      if (this.qualityMode === 'hemat') return 320;
+      return this.detQuality || (this.quality ? this.quality.width : 640);
+    },
+
+    /* ==== Kanvas overlay: ukuran di-cache, bukan dibaca tiap frame ==== */
+    observeCanvas() {
+      const canvas = this.canvas;
+      if (!canvas) return;
+      this.canvasDirty = true;
+      if (typeof ResizeObserver !== 'undefined') {
+        try {
+          this.ro = new ResizeObserver(() => {
+            this.canvasDirty = true;
+          });
+          this.ro.observe(canvas);
+          return;
+        } catch (e) {}
+      }
+      this.canvasNoRO = true;
+    },
+
+    measureCanvas() {
+      const canvas = this.canvas;
+      if (!canvas) return;
+      this.canvasDirty = false;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      const dpr = Math.min(global.devicePixelRatio || 1, 2);
+      if (!w || !h) return;
+      this.cw = w;
+      this.ch = h;
+      this.cdpr = dpr;
+      const pw = Math.round(w * dpr);
+      const ph = Math.round(h * dpr);
+      if (canvas.width !== pw || canvas.height !== ph) {
+        canvas.width = pw;
+        canvas.height = ph;
+      }
     },
 
     async listDevices() {
@@ -150,29 +459,15 @@
     },
 
     tick(nowMs, opts) {
-      const ready = this.modelReady && this.landmarker && this.video && this.video.srcObject && this.video.readyState >= 2;
-      if (!ready) {
+      const streaming = this.video && this.video.srcObject && this.video.readyState >= 2;
+      const usable = streaming && (this.workerReady || (this.modelReady && this.landmarker));
+      if (!usable) {
         if (this.state === 'ready' && nowMs - this.lastFrameAt > 1500 && !this.video.srcObject) this.setStatus('no-camera', 'kamera terputus');
         return null;
       }
 
-      if (this.video.currentTime !== this.lastVideoTime && nowMs >= this.nextDetect) {
-        this.lastVideoTime = this.video.currentTime;
-        this.lastFrameAt = nowMs;
-        this.nextDetect = nowMs + 30;
-        try {
-          this.ts = Math.max(this.ts + 1, Math.round(nowMs));
-          const res = this.landmarker.detectForVideo(this.video, this.ts);
-          const lms = res.landmarks || [];
-          this.dets = lms.map((lm, i) => ({
-            lm,
-            world: res.worldLandmarks ? res.worldLandmarks[i] : null,
-            handedness: res.handedness && res.handedness[i] && res.handedness[i][0] ? res.handedness[i][0].categoryName : '',
-          }));
-        } catch (e) {
-          this.dets = [];
-        }
-      }
+      if (this.workerReady) this.pumpWorker(nowMs);
+      else this.detectSync(nowMs);
 
       if (nowMs - this.lastFrameAt > 450 && this.dets.length) this.dets = [];
 
@@ -224,16 +519,13 @@
       const canvas = this.canvas;
       const video = this.video;
       if (!canvas || !video) return;
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      if (!w || !h) return;
       const dpr = Math.min(global.devicePixelRatio || 1, 2);
-      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
-        canvas.width = Math.round(w * dpr);
-        canvas.height = Math.round(h * dpr);
-      }
+      if (this.canvasDirty || this.canvasNoRO || dpr !== this.cdpr) this.measureCanvas();
+      const w = this.cw;
+      const h = this.ch;
+      if (!w || !h) return;
       const ctx = canvas.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.setTransform(this.cdpr, 0, 0, this.cdpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
       const tracks = this.tracks || [];

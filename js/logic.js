@@ -212,9 +212,11 @@
   }
 
   class OneEuro {
+    // Default dibuat lebih responsif: telunjuk harus terasa langsung
+    // mengikuti di layar besar, noise tetap teredam oleh beta*|dx|.
     constructor(minCutoff, beta, dCutoff) {
-      this.minCutoff = minCutoff === undefined ? 1.0 : minCutoff;
-      this.beta = beta === undefined ? 0.5 : beta;
+      this.minCutoff = minCutoff === undefined ? 1.4 : minCutoff;
+      this.beta = beta === undefined ? 0.9 : beta;
       this.dCutoff = dCutoff === undefined ? 1.0 : dCutoff;
       this.x = null;
       this.dx = 0;
@@ -317,6 +319,99 @@
       state.t = 0;
     }
     return { progress, fired, target: state.target };
+  }
+
+  // Kualitas deteksi adaptif: pilih lebar input worker berdasarkan biaya
+  // inferensi yang terukur. Turun cepat saat mesin lambat, naik hati-hati
+  // saat mesin lega, dengan histeresis + cooldown supaya tidak berosilasi.
+  function createAdaptiveQuality(opts) {
+    const o = opts || {};
+    const widths = (o.widths && o.widths.length ? o.widths.slice() : [640, 512, 384, 320])
+      .filter((w) => w > 0)
+      .sort((a, b) => b - a);
+    const highMs = o.highMs || 55;
+    const lowMs = o.lowMs || 22;
+    const cooldownMs = o.cooldownMs || 2500;
+    const settleSamples = o.settleSamples || 6;
+    const slowStreakN = o.slowStreak || 3;
+    const fastStreakN = o.fastStreak || 14;
+    const alpha = o.alpha || 0.25;
+    const warmup = o.warmup || 8;
+    const startIndex = clamp(Math.round(o.startIndex || 0), 0, widths.length - 1);
+
+    const q = {
+      widths: widths,
+      index: startIndex,
+      width: widths[startIndex],
+      ewma: 0,
+      changes: 0,
+      samples: 0,
+      _slow: 0,
+      _fast: 0,
+      _skip: 0,
+      _lastChange: -Infinity,
+
+      // costMs: biaya inferensi (round-trip) satu frame. nowMs: jam perf.
+      sample(nowMs, costMs) {
+        const now = typeof nowMs === 'number' ? nowMs : 0;
+        const cost = Math.max(0, Number(costMs) || 0);
+        q.samples += 1;
+        q.ewma = q.ewma ? q.ewma * (1 - alpha) + cost * alpha : cost;
+        if (q.samples <= warmup) return { width: q.width, index: q.index, changed: false, direction: 0 };
+
+        if (q._skip > 0) {
+          q._skip -= 1;
+          return { width: q.width, index: q.index, changed: false, direction: 0 };
+        }
+        if (now - q._lastChange < cooldownMs) return { width: q.width, index: q.index, changed: false, direction: 0 };
+
+        let changed = false;
+        let direction = 0;
+        if (q.ewma > highMs && q.index < widths.length - 1) {
+          q._slow += 1;
+          q._fast = 0;
+          if (q._slow >= slowStreakN) {
+            q.index += 1;
+            changed = true;
+            direction = -1;
+          }
+        } else if (q.ewma < lowMs && q.index > 0) {
+          q._fast += 1;
+          q._slow = 0;
+          if (q._fast >= fastStreakN) {
+            q.index -= 1;
+            changed = true;
+            direction = 1;
+          }
+        } else {
+          q._slow = 0;
+          q._fast = 0;
+        }
+
+        if (changed) {
+          q.width = widths[q.index];
+          q.changes += 1;
+          q._slow = 0;
+          q._fast = 0;
+          q._skip = settleSamples;
+          q._lastChange = now;
+        }
+        return { width: q.width, index: q.index, changed: changed, direction: direction, ewma: q.ewma };
+      },
+
+      reset() {
+        q.index = startIndex;
+        q.width = widths[startIndex];
+        q.ewma = 0;
+        q.samples = 0;
+        q.changes = 0;
+        q._slow = 0;
+        q._fast = 0;
+        q._skip = 0;
+        q._lastChange = -Infinity;
+      },
+    };
+    return q;
   }
 
   function createTrackingState() {
@@ -558,6 +653,7 @@
     OneEuro,
     createDwellState,
     updateDwell,
+    createAdaptiveQuality,
     createTrackingState,
     processDetections,
     hitTest,

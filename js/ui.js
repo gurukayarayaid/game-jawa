@@ -24,6 +24,7 @@
       this.get('fx');
       this.get('arena');
       this.get('toast');
+      this.get('hud');
       this.measureCursors();
     },
 
@@ -92,7 +93,26 @@
 
     setCamHint(text) {
       const el = this.get('cam-hint');
-      if (el) el.textContent = text;
+      if (!el || el.textContent === text) return;
+      el.textContent = text;
+    },
+
+    setHudVisible(on) {
+      const el = this.get('hud');
+      if (!el) return;
+      el.hidden = !on;
+    },
+
+    updateHud(fps, s) {
+      const el = this.get('hud');
+      if (!el || el.hidden || !s) return;
+      const txt =
+        'FPS ' + fps.toFixed(1) + '\n' +
+        'deteksi ' + s.hz + ' Hz · latensi ' + s.latMs + ' ms\n' +
+        'jalur: ' + s.path +
+        (s.quality ? ' · ' + s.quality + 'px' + (s.qualityMode && s.qualityMode !== 'auto' ? ' (' + s.qualityMode + ')' : '') : '') +
+        (s.capMs > 0 ? ' · capture ' + s.capMs + ' ms' : '');
+      if (el.textContent !== txt) el.textContent = txt;
     },
 
     setHandHints(hints) {
@@ -101,7 +121,7 @@
         const txt = this.get('hs-txt-' + n);
         if (!box || !txt) return;
         const h = hints[n];
-        txt.textContent = h.text;
+        if (txt.textContent !== h.text) txt.textContent = h.text;
         box.classList.toggle('point', h.kind === 'point');
         box.classList.toggle('palm', h.kind === 'palm' || h.kind === 'fist');
       };
@@ -113,8 +133,9 @@
       const el = this.get('sb-hand-' + player);
       if (!el) return;
       const on = seen && pointing;
+      const next = seen ? (pointing ? 'menunjuk' : 'tangan ada') : 'tangan -';
+      if (el.textContent !== next) el.textContent = next;
       el.classList.toggle('on', !!on);
-      el.textContent = seen ? (pointing ? 'menunjuk' : 'tangan ada') : 'tangan -';
     },
 
     placeCamBox(where) {
@@ -169,6 +190,7 @@
         const img = document.createElement('img');
         img.src = AJ.ASSET_BASE + question.options[index].value + '.png';
         img.alt = question.options[index].value;
+        img.decoding = 'async';
         el.appendChild(img);
       } else {
         const span = document.createElement('span');
@@ -225,7 +247,11 @@
       const f = this.get('timer-fill');
       if (!f) return;
       const v = Math.max(0, Math.min(1, frac));
-      f.style.width = v * 100 + '%';
+      const pct = (v * 100).toFixed(2) + '%';
+      if (this._timerPct !== pct) {
+        this._timerPct = pct;
+        f.style.width = pct;
+      }
       f.classList.toggle('warn', v <= 0.34 && v > 0.16);
       f.classList.toggle('danger', v <= 0.16);
     },

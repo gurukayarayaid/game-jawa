@@ -8,17 +8,21 @@
     mode: '2p',
     level: 'sedang',
     rounds: 10,
+    quality: 'auto',
     dwellMs: 700,
     gain: 1,
     mirror: true,
     sound: true,
     camId: '',
     cal: { 1: null, 2: null },
+    hud: false,
   };
 
   let settings = loadSettings();
   let mode = 'menu';
   let lastT = performance.now();
+  let hudFrames = 0;
+  let hudAt = performance.now();
 
   function loadSettings() {
     const s = Object.assign({}, DEFAULT_SETTINGS);
@@ -209,6 +213,19 @@
     }
   }
 
+  const QUALITY_HINT = {
+    auto: 'Menyesuaikan otomatis: resolusi turun saat mesin lambat, naik saat lega.',
+    tinggi: 'Selalu deteksi resolusi penuh (640px). Paling presisi, tapi berat di mesin atau browser lambat.',
+    hemat: 'Selalu resolusi rendah (320px). Paling ringan dan hemat, cocok untuk perangkat yang tersendat.',
+  };
+
+  function updateQualityHint(mode) {
+    const el = UI.get('quality-hint');
+    if (!el) return;
+    const t = QUALITY_HINT[mode] || QUALITY_HINT.auto;
+    if (el.textContent !== t) el.textContent = t;
+  }
+
   function syncControls() {
     const set = (id, v) => {
       const el = UI.get(id);
@@ -225,10 +242,14 @@
     segSet('seg-mode', settings.mode);
     segSet('seg-level', settings.level);
     segSet('seg-rounds', String(settings.rounds));
+    segSet('seg-quality', settings.quality);
+    updateQualityHint(settings.quality);
+    if (Gestures.setQualityMode) Gestures.setQualityMode(settings.quality);
     applyMode();
     UI.setNames(settings.p1, settings.p2);
     UI.setSoundLabel(settings.sound);
     UI.setFullscreenLabel(isFullscreen());
+    UI.setHudVisible(!!settings.hud);
     Sfx.enabled = !!settings.sound;
   }
 
@@ -317,6 +338,11 @@
     segWire('seg-mode', (v) => { settings.mode = v === '1p' ? '1p' : '2p'; applyMode(); });
     segWire('seg-level', (v) => { settings.level = v; });
     segWire('seg-rounds', (v) => { settings.rounds = parseInt(v, 10) || 10; });
+    segWire('seg-quality', (v) => {
+      settings.quality = v === 'tinggi' || v === 'hemat' ? v : 'auto';
+      updateQualityHint(settings.quality);
+      if (Gestures.setQualityMode) Gestures.setQualityMode(settings.quality);
+    });
 
     const dwell = UI.get('in-dwell');
     if (dwell) dwell.addEventListener('input', () => {
@@ -378,6 +404,11 @@
         toggleFullscreen();
       } else if (e.key === 'm' || e.key === 'M') {
         toggleSound();
+      } else if (e.key === 'h' || e.key === 'H') {
+        settings.hud = !settings.hud;
+        UI.setHudVisible(settings.hud);
+        saveSettings();
+        UI.showToast('HUD performa: ' + (settings.hud ? 'ON' : 'OFF'));
       }
     });
 
@@ -399,6 +430,13 @@
   function frame(now) {
     const dt = Math.min(now - lastT, 60);
     lastT = now;
+
+    hudFrames += 1;
+    if (now - hudAt >= 500) {
+      UI.updateHud((hudFrames * 1000) / (now - hudAt), Gestures.getStats());
+      hudFrames = 0;
+      hudAt = now;
+    }
 
     const cam = Gestures.tick(now, {
       W: innerWidth,
@@ -440,6 +478,7 @@
   function boot() {
     UI.init();
     UI.buildBrand();
+    if (/(?:^|[?&])hud=1(?:&|$)/.test(location.search)) settings.hud = true;
     syncControls();
 
     Pointer.init(document.getElementById('app'));

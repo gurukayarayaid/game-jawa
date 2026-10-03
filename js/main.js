@@ -514,6 +514,10 @@
       }
     };
 
+    Gestures.onNotice = (msg) => {
+      if (msg) UI.showToast(msg, 4200);
+    };
+
     Gestures.onDevices = (devices, track) => {
       const sel = UI.get('sel-cam');
       if (!sel) return;

@@ -5,6 +5,8 @@
   const MP_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@' + MP_VERSION;
   const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
   const HAND_CONNECTIONS = [
     [0, 1], [1, 2], [2, 3], [3, 4],
     [0, 5], [5, 6], [6, 7], [7, 8],
@@ -26,6 +28,7 @@
     message: '',
     onStatus: null,
     onDevices: null,
+    onNotice: null,
     tracking: AJ.createTrackingState(),
     tracks: [],
     players: null,
@@ -420,31 +423,74 @@
       return list.filter((d) => d.kind === 'videoinput');
     },
 
+    // Tangga batasan: dari paling ketat (resolusi penuh) ke paling longgar
+    // (perangkat & resolusi apa saja), supaya kamera tetap terbuka walau
+    // resolusi tidak didukung atau kamera pilihan sedang sibuk.
+    cameraLadder(deviceId) {
+      const exact = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'user' };
+      const ideal = deviceId ? { deviceId: { ideal: deviceId } } : { facingMode: { ideal: 'user' } };
+      return [
+        Object.assign({}, exact, { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }),
+        Object.assign({}, exact, { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }),
+        ideal,
+        {},
+      ];
+    },
+
+    async attachStream(stream, deviceId) {
+      if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
+      const track = stream.getVideoTracks()[0];
+      const st = track && track.getSettings ? track.getSettings() : null;
+      this.stream = stream;
+      this.deviceId = (st && st.deviceId) || deviceId || '';
+      this.video.srcObject = stream;
+      this.video.muted = true;
+      try {
+        await this.video.play();
+      } catch (e) {}
+      this.frozenSince = 0;
+      this.lastVideoTime = -1;
+      this.dets = [];
+      try {
+        const devices = await this.listDevices();
+        if (this.onDevices) this.onDevices(devices, track);
+      } catch (e) {}
+      return stream;
+    },
+
+    async openCamera(deviceId) {
+      const ladder = this.cameraLadder(deviceId);
+      let lastErr = null;
+      for (let i = 0; i < ladder.length; i++) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          let stream;
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: ladder[i] });
+          } catch (err) {
+            lastErr = err;
+            const name = err && err.name;
+            // Izin ditolak tidak bisa sembuh sendiri -> berhenti mencoba.
+            if (name === 'NotAllowedError' || name === 'SecurityError') throw err;
+            const transient = name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError';
+            // Error sesaat (kamera sedang dipakai): coba sekali lagi setelah jeda.
+            if (transient && attempt === 0) {
+              await wait(400 + i * 250);
+              continue;
+            }
+            break;
+          }
+          if (i > 0 && this.onNotice) this.onNotice('Kamera dibuka dengan pengaturan lebih ringan agar tetap jalan.');
+          return this.attachStream(stream, deviceId);
+        }
+      }
+      throw lastErr || new Error('kamera gagal dibuka');
+    },
+
     async startCamera(deviceId) {
       if (this.camPromise) {
         await this.camPromise;
       }
-      const videoConstraint = deviceId
-        ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
-        : { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
-      const p = navigator.mediaDevices.getUserMedia({ audio: false, video: videoConstraint }).then(async (stream) => {
-        if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
-        this.stream = stream;
-        this.deviceId = deviceId || '';
-        this.video.srcObject = stream;
-        this.video.muted = true;
-        try {
-          await this.video.play();
-        } catch (e) {}
-        this.frozenSince = 0;
-        this.lastVideoTime = -1;
-        this.dets = [];
-        try {
-          const devices = await this.listDevices();
-          if (this.onDevices) this.onDevices(devices, stream.getVideoTracks()[0]);
-        } catch (e) {}
-        return stream;
-      });
+      const p = this.openCamera(deviceId);
       this.camPromise = p;
       try {
         await p;

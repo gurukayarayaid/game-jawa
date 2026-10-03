@@ -77,6 +77,10 @@
       this.setStatus('loading', 'memuat model gesture…');
       this.observeCanvas();
       this.initWorker();
+      if (!global.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        this.setStatus('insecure', 'butuh https atau localhost');
+        return;
+      }
       try {
         await this.startCamera(this.deviceId);
         if (this.modelReady) this.setStatus('ready', 'gesture siap');
@@ -87,6 +91,8 @@
           this.setStatus('no-permission', 'izin kamera ditolak');
         } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
           this.setStatus('no-camera', 'kamera tidak ditemukan');
+        } else if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') {
+          this.setStatus('cam-busy', 'kamera sedang dipakai');
         } else {
           this.setStatus('error', String(err && err.message ? err.message : err));
         }

@@ -84,11 +84,13 @@
         offline: ['err', 'model gagal'],
         'no-permission': ['err', 'izin ditolak'],
         'no-camera': ['err', 'tidak ada kamera'],
+        'cam-busy': ['err', 'kamera sedang dipakai'],
+        insecure: ['err', 'butuh https'],
         error: ['err', 'error'],
       };
       const m = map[state] || ['', state];
       el.className = 'status ' + m[0];
-      el.textContent = m[1];
+      el.textContent = state === 'error' && msg ? String(msg).slice(0, 48) : m[1];
     },
 
     setCamHint(text) {

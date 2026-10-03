@@ -494,6 +494,14 @@
       } else if (state === 'offline') {
         UI.setCamHint('Model gesture gagal dimuat – cek koneksi internet');
         UI.showToast('Gagal memuat model gesture (butuh internet saat pertama).', 5000);
+      } else if (state === 'cam-busy') {
+        UI.setCamHint('Kamera sedang dipakai aplikasi lain – tutup aplikasi itu lalu muat ulang');
+        UI.showToast('Kamera tidak bisa dibuka karena sedang dipakai. Mode sentuh layar tetap bisa.', 5000);
+      } else if (state === 'insecure') {
+        UI.setCamHint('Kamera butuh halaman https atau localhost – buka lewat jalankan.bat atau situs GitHub Pages');
+        UI.showToast('Akses kamera diblokir: buka lewat https:// atau http://localhost.', 6000);
+      } else if (state === 'error') {
+        UI.setCamHint('Kamera gagal dibuka: ' + (msg || 'sebab tidak diketahui') + ' – pakai sentuh layar');
       }
     };
 

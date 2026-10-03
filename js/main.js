@@ -483,25 +483,34 @@
 
     Pointer.init(document.getElementById('app'));
 
+    const CAM_ERR = { 'no-permission': 1, 'no-camera': 1, offline: 1, 'cam-busy': 1, insecure: 1, error: 1 };
     Gestures.onStatus = (state, msg) => {
       UI.setCamStatus(state, msg);
+      if (state === 'ready') {
+        UI.setTouchMode(false);
+        return;
+      }
+      if (!CAM_ERR[state]) return;
+      // Kamera/model tak bisa dipakai -> pindah mulus ke mode sentuh layar.
+      UI.setTouchMode(true);
       if (state === 'no-permission') {
-        UI.setCamHint('Izin kamera ditolak – buka lewat http://localhost atau izinkan kamera');
-        UI.showToast('Kamera diblokir. Main tetap bisa dengan sentuhan layar.', 5000);
+        UI.setCamHint('Izin kamera ditolak – izinkan kamera lalu muat ulang, atau ketuk layar');
+        UI.showToast('Kamera diblokir. Mode sentuh layar aktif.', 5000);
       } else if (state === 'no-camera') {
-        UI.setCamHint('Tidak ada kamera – gunakan sentuhan layar');
-        UI.showToast('Kamera tidak ditemukan. Mode sentuh layar tetap bisa dipakai.', 5000);
+        UI.setCamHint('Tidak ada kamera – ketuk layar untuk menjawab');
+        UI.showToast('Kamera tidak ditemukan. Mode sentuh layar aktif.', 5000);
       } else if (state === 'offline') {
-        UI.setCamHint('Model gesture gagal dimuat – cek koneksi internet');
-        UI.showToast('Gagal memuat model gesture (butuh internet saat pertama).', 5000);
+        UI.setCamHint('Model gesture gagal dimuat – ketuk layar untuk menjawab');
+        UI.showToast('Gagal memuat model gesture (butuh internet). Mode sentuh layar aktif.', 5000);
       } else if (state === 'cam-busy') {
-        UI.setCamHint('Kamera sedang dipakai aplikasi lain – tutup aplikasi itu lalu muat ulang');
-        UI.showToast('Kamera tidak bisa dibuka karena sedang dipakai. Mode sentuh layar tetap bisa.', 5000);
+        UI.setCamHint('Kamera sedang dipakai aplikasi lain – tutup lalu muat ulang, atau ketuk layar');
+        UI.showToast('Kamera sedang dipakai aplikasi lain. Mode sentuh layar aktif.', 5000);
       } else if (state === 'insecure') {
-        UI.setCamHint('Kamera butuh halaman https atau localhost – buka lewat jalankan.bat atau situs GitHub Pages');
-        UI.showToast('Akses kamera diblokir: buka lewat https:// atau http://localhost.', 6000);
-      } else if (state === 'error') {
-        UI.setCamHint('Kamera gagal dibuka: ' + (msg || 'sebab tidak diketahui') + ' – pakai sentuh layar');
+        UI.setCamHint('Kamera butuh halaman https atau localhost – ketuk layar untuk menjawab');
+        UI.showToast('Akses kamera diblokir: buka lewat https:// atau http://localhost. Mode sentuh layar aktif.', 6000);
+      } else {
+        UI.setCamHint('Kamera gagal dibuka: ' + (msg || 'sebab tidak diketahui') + ' – ketuk layar untuk menjawab');
+        UI.showToast('Kamera gagal dibuka. Mode sentuh layar aktif.', 5000);
       }
     };
 

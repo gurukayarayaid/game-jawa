@@ -93,8 +93,11 @@
       this.hover = { 1: null, 2: null };
 
       UI.clearOptions();
-      this.buildOptions();
+      // Susun soal dulu, baru ukur arena: konten soal mengubah tinggi topbar,
+      // sehingga titik bidik (rects) cocok dengan posisi opsi yang terlihat.
       UI.buildQuestion(this.question, n);
+      this.refreshArena();
+      this.buildOptions();
       UI.updateRound(n, this.totalRounds);
       UI.updateTimer(1);
       UI.hideFlash();
@@ -176,6 +179,9 @@
 
     update(dtMs, players, now) {
       this.now = now;
+      // Ukur ulang tiap frame supaya rects() selalu sejajar dengan posisi
+      // opsi di layar walau tata letak bergeser (font/gambar telat dimuat).
+      this.refreshArena();
       if (this.paused) return;
 
       if (this.state === 'countdown') {

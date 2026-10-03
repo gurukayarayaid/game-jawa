@@ -179,6 +179,18 @@ button, input, select { font: inherit; color: inherit; }
 .cam-box.mini { position: absolute; right: 16px; bottom: 64px; left: auto; width: clamp(140px, 12vw, 200px); aspect-ratio: 16/9; z-index: 5; opacity: .5; transition: opacity .2s; box-shadow: 0 8px 24px rgba(0,0,0,.5); pointer-events: none; }
 .cam-box.mini:hover { opacity: .95; }
 .cam-box.mini .cam-hint { display: none; }
+.cam-touch {
+  position: absolute; left: 50%; top: 10px; transform: translateX(-50%);
+  background: linear-gradient(180deg, #2fdd7d, #16a34a); color: #06240f; font-weight: 800;
+  font-size: clamp(11px, 1.3vh, 15px); padding: 6px 14px; border-radius: 999px; white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(22, 163, 74, .35); pointer-events: none; z-index: 6;
+}
+.cam-touch[hidden] { display: none; }
+.cam-box.mini .cam-touch { display: none; }
+#app.m-sentuh .cam-box { box-shadow: inset 0 0 0 3px #86efac, 0 10px 26px rgba(22, 163, 74, .18); }
+#app.m-sentuh .cam-box video { opacity: .4; }
+#app.m-sentuh .cam-hint { background: rgba(6, 78, 59, .85); color: #d1fae5; font-weight: 700; }
+.btn:disabled { opacity: .5; cursor: not-allowed; filter: grayscale(.35); }
 
 .cam-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .quality-hint { margin: 6px 2px 0; font-size: clamp(11px, 1.3vh, 14px); color: var(--ink-soft); line-height: 1.4; }

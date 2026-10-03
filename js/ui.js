@@ -9,6 +9,7 @@
     names: { 1: 'Pemain 1', 2: 'Pemain 2' },
     cursorSize: 70,
     toastTimer: null,
+    touchMode: false,
 
     get(id) {
       if (!this.el[id]) this.el[id] = document.getElementById(id);
@@ -99,6 +100,31 @@
       el.textContent = text;
     },
 
+    touchHints() {
+      return {
+        1: { kind: 'wait', text: 'ketuk sisi kiri layar' },
+        2: { kind: 'wait', text: 'ketuk sisi kanan layar' },
+      };
+    },
+
+    // Mode sentuh otomatis: dipakai saat kamera/model tidak bisa diandalkan.
+    setTouchMode(on) {
+      on = !!on;
+      if (this.touchMode === on) return;
+      this.touchMode = on;
+      const app = this.get('app');
+      if (app) app.classList.toggle('m-sentuh', on);
+      const banner = this.get('cam-touch');
+      if (banner) banner.hidden = !on;
+      const btn = this.get('btn-recal');
+      if (btn) {
+        btn.disabled = on;
+        btn.title = on ? 'Kalibrasi gerak butuh kamera aktif' : '';
+      }
+      if (on) this.setCamHint('Ketuk kartu jawaban di layar untuk memilih');
+      this.setHandHints(this.touchHints());
+    },
+
     setHudVisible(on) {
       const el = this.get('hud');
       if (!el) return;
@@ -118,6 +144,8 @@
     },
 
     setHandHints(hints) {
+      if (this.touchMode) hints = this.touchHints();
+      if (!hints) return;
       const apply = (n) => {
         const box = this.get('hs-' + n);
         const txt = this.get('hs-txt-' + n);
@@ -134,6 +162,12 @@
     setHandFlag(player, seen, pointing) {
       const el = this.get('sb-hand-' + player);
       if (!el) return;
+      if (this.touchMode) {
+        const next = seen ? 'sentuh!' : 'siap sentuh';
+        if (el.textContent !== next) el.textContent = next;
+        el.classList.toggle('on', !!seen);
+        return;
+      }
       const on = seen && pointing;
       const next = seen ? (pointing ? 'menunjuk' : 'tangan ada') : 'tangan -';
       if (el.textContent !== next) el.textContent = next;

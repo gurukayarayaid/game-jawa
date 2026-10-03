@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Gesture Battle Aksara Jawa</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="css/style.css?v=10">
+<link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body>
 <div id="app">
@@ -92,6 +92,16 @@
           <div class="hand-status">
             <div class="hs s1" id="hs-1"><b id="hs-name-1">Pemain 1</b><span id="hs-txt-1">menunggu tangan…</span></div>
             <div class="hs s2" id="hs-2"><b id="hs-name-2">Pemain 2</b><span id="hs-txt-2">menunggu tangan…</span></div>
+          </div>
+          <div class="diag-wrap">
+            <button type="button" id="btn-diag" class="btn ghost sm" aria-expanded="false">Diagnostik kamera</button>
+            <div class="cam-diag" id="cam-diag" hidden>
+              <pre id="cam-diag-body">Buka untuk memeriksa status kamera.</pre>
+              <div class="diag-actions">
+                <button type="button" id="btn-diag-refresh" class="btn ghost sm">Segarkan</button>
+                <button type="button" id="btn-diag-copy" class="btn ghost sm">Salin laporan</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -219,12 +229,12 @@
 <div id="toast"></div>
 </div>
 
-<script src="js/logic.js?v=10"></script>
-<script src="js/audio.js?v=10"></script>
-<script src="js/gestures.js?v=10"></script>
-<script src="js/pointer.js?v=10"></script>
-<script src="js/ui.js?v=10"></script>
-<script src="js/game.js?v=10"></script>
-<script src="js/main.js?v=10"></script>
+<script src="js/logic.js?v=11"></script>
+<script src="js/audio.js?v=11"></script>
+<script src="js/gestures.js?v=11"></script>
+<script src="js/pointer.js?v=11"></script>
+<script src="js/ui.js?v=11"></script>
+<script src="js/game.js?v=11"></script>
+<script src="js/main.js?v=11"></script>
 </body>
 </html>

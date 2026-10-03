@@ -631,6 +631,28 @@
     return { winner, s1, s2, draw: winner === 0, roundsPlayed };
   }
 
+  // Ringkasan diagnostik kamera sebagai teks rata, agar mudah dibaca
+  // maupun disalin untuk pelaporan masalah.
+  function formatCameraDiag(d) {
+    d = d || {};
+    const permMap = { granted: 'diizinkan', denied: 'ditolak', prompt: 'belum diputuskan' };
+    const perm = permMap[d.perm] || d.perm || 'tidak diketahui';
+    const lines = [
+      'Izin kamera: ' + perm + (permMap[d.perm] ? ' (' + d.perm + ')' : ''),
+      'Konteks aman: ' + (d.secure ? 'ya' : 'TIDAK') +
+        ' — ' + (d.local ? 'localhost' : 'bukan localhost') +
+        (d.origin ? ' · ' + d.origin : ''),
+    ];
+    const cams = Array.isArray(d.cams) ? d.cams : [];
+    lines.push('Kamera terdeteksi: ' + cams.length);
+    for (const c of cams) lines.push('  - ' + ((c && c.label) || '(tanpa nama)'));
+    const a = d.active;
+    if (a && a.w) lines.push('Resolusi aktif: ' + a.w + '×' + a.h + (a.fps ? ' @' + Math.round(a.fps) + ' fps' : ''));
+    lines.push('Status terakhir: ' + (d.state || '-') + (d.message ? ' (' + d.message + ')' : ''));
+    lines.push('Error mentah: ' + (d.error ? ((d.error.name || '') + (d.error.message ? ' — ' + d.error.message : '')).trim() || '-' : '-'));
+    return lines.join('\n');
+  }
+
   global.AJ = {
     AKSARA,
     ASSET_BASE,
@@ -658,6 +680,7 @@
     processDetections,
     hitTest,
     finalStandings,
+    formatCameraDiag,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
 

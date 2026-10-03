@@ -29,6 +29,7 @@
     onStatus: null,
     onDevices: null,
     onNotice: null,
+    lastError: null,
     tracking: AJ.createTrackingState(),
     tracks: [],
     players: null,
@@ -470,7 +471,10 @@
             lastErr = err;
             const name = err && err.name;
             // Izin ditolak tidak bisa sembuh sendiri -> berhenti mencoba.
-            if (name === 'NotAllowedError' || name === 'SecurityError') throw err;
+            if (name === 'NotAllowedError' || name === 'SecurityError') {
+              this.lastError = { name: name, message: (err && err.message) || '' };
+              throw err;
+            }
             const transient = name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError';
             // Error sesaat (kamera sedang dipakai): coba sekali lagi setelah jeda.
             if (transient && attempt === 0) {
@@ -479,10 +483,14 @@
             }
             break;
           }
+          this.lastError = null;
           if (i > 0 && this.onNotice) this.onNotice('Kamera dibuka dengan pengaturan lebih ringan agar tetap jalan.');
           return this.attachStream(stream, deviceId);
         }
       }
+      this.lastError = lastErr
+        ? { name: lastErr.name || '', message: lastErr.message || '' }
+        : { name: '', message: 'kamera gagal dibuka' };
       throw lastErr || new Error('kamera gagal dibuka');
     },
 

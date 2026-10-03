@@ -125,6 +125,27 @@
       this.setHandHints(this.touchHints());
     },
 
+    isDiagOpen() {
+      const box = this.get('cam-diag');
+      return !!box && !box.hidden;
+    },
+
+    setDiag(open) {
+      const box = this.get('cam-diag');
+      if (!box) return;
+      box.hidden = !open;
+      const btn = this.get('btn-diag');
+      if (btn) {
+        btn.classList.toggle('on', !!open);
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+    },
+
+    renderDiag(text) {
+      const el = this.get('cam-diag-body');
+      if (el && el.textContent !== text) el.textContent = text;
+    },
+
     setHudVisible(on) {
       const el = this.get('hud');
       if (!el) return;

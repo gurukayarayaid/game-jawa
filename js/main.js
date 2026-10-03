@@ -47,6 +47,49 @@
     };
   }
 
+  async function gatherCameraDiag() {
+    const d = {
+      perm: 'tidak diketahui',
+      secure: !!window.isSecureContext,
+      local: /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname),
+      origin: location.origin,
+      cams: [],
+      state: Gestures.state,
+      message: Gestures.message,
+      error: Gestures.lastError ? { name: Gestures.lastError.name, message: Gestures.lastError.message } : null,
+      active: null,
+    };
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        const st = await navigator.permissions.query({ name: 'camera' });
+        d.perm = st.state;
+      } else {
+        d.perm = 'tak didukung';
+      }
+    } catch (e) {
+      d.perm = 'tak bisa dibaca';
+    }
+    try {
+      const list = await Gestures.listDevices();
+      d.cams = list.map((c, i) => ({ label: c.label || 'Kamera ' + (i + 1), id: c.deviceId }));
+    } catch (e) {
+      d.cams = [];
+    }
+    const track = Gestures.stream && Gestures.stream.getVideoTracks ? Gestures.stream.getVideoTracks()[0] : null;
+    if (track && track.getSettings) {
+      const s = track.getSettings();
+      d.active = { w: s.width || 0, h: s.height || 0, fps: s.frameRate || 0 };
+    }
+    return d;
+  }
+
+  async function refreshCameraDiag() {
+    UI.renderDiag('memeriksa…');
+    const d = await gatherCameraDiag();
+    UI.renderDiag(AJ.formatCameraDiag(d));
+    return d;
+  }
+
   function mergedPlayers(now, cam) {
     const m = cam ? { 1: Object.assign({}, cam[1]), 2: Object.assign({}, cam[2]) } : idlePlayers();
     for (const p of [1, 2]) {
@@ -379,6 +422,23 @@
       }
     });
 
+    const diagBtn = UI.get('btn-diag');
+    if (diagBtn) diagBtn.addEventListener('click', () => {
+      const open = !UI.isDiagOpen();
+      UI.setDiag(open);
+      if (open) refreshCameraDiag();
+    });
+    on('btn-diag-refresh', () => refreshCameraDiag());
+    on('btn-diag-copy', async () => {
+      const d = await refreshCameraDiag();
+      try {
+        await navigator.clipboard.writeText(AJ.formatCameraDiag(d));
+        UI.showToast('Laporan kamera disalin.', 2600);
+      } catch (e) {
+        UI.showToast('Gagal menyalin – salin manual dari kotak diagnostik.', 3600);
+      }
+    });
+
     on('btn-recal', () => Wizard.start());
     on('btn-cal-skip', () => Wizard.skip());
     on('btn-full', toggleFullscreen);
@@ -484,34 +544,30 @@
     Pointer.init(document.getElementById('app'));
 
     const CAM_ERR = { 'no-permission': 1, 'no-camera': 1, offline: 1, 'cam-busy': 1, insecure: 1, error: 1 };
+    const CAM_HINT = {
+      'no-permission': ['Izin kamera ditolak – izinkan kamera lalu muat ulang, atau ketuk layar', 'Kamera diblokir. Mode sentuh layar aktif.'],
+      'no-camera': ['Tidak ada kamera – ketuk layar untuk menjawab', 'Kamera tidak ditemukan. Mode sentuh layar aktif.'],
+      offline: ['Model gesture gagal dimuat – ketuk layar untuk menjawab', 'Gagal memuat model gesture (butuh internet). Mode sentuh layar aktif.'],
+      'cam-busy': ['Kamera sedang dipakai aplikasi lain – tutup lalu muat ulang, atau ketuk layar', 'Kamera sedang dipakai aplikasi lain. Mode sentuh layar aktif.'],
+      insecure: ['Kamera butuh halaman https atau localhost – ketuk layar untuk menjawab', 'Akses kamera diblokir: buka lewat https:// atau http://localhost. Mode sentuh layar aktif.'],
+    };
     Gestures.onStatus = (state, msg) => {
       UI.setCamStatus(state, msg);
       if (state === 'ready') {
         UI.setTouchMode(false);
-        return;
+      } else if (CAM_ERR[state]) {
+        // Kamera/model tak bisa dipakai -> pindah mulus ke mode sentuh layar.
+        UI.setTouchMode(true);
+        const pair = CAM_HINT[state];
+        if (pair) {
+          UI.setCamHint(pair[0]);
+          UI.showToast(pair[1], state === 'insecure' ? 6000 : 5000);
+        } else {
+          UI.setCamHint('Kamera gagal dibuka: ' + (msg || 'sebab tidak diketahui') + ' – ketuk layar untuk menjawab');
+          UI.showToast('Kamera gagal dibuka. Mode sentuh layar aktif.', 5000);
+        }
       }
-      if (!CAM_ERR[state]) return;
-      // Kamera/model tak bisa dipakai -> pindah mulus ke mode sentuh layar.
-      UI.setTouchMode(true);
-      if (state === 'no-permission') {
-        UI.setCamHint('Izin kamera ditolak – izinkan kamera lalu muat ulang, atau ketuk layar');
-        UI.showToast('Kamera diblokir. Mode sentuh layar aktif.', 5000);
-      } else if (state === 'no-camera') {
-        UI.setCamHint('Tidak ada kamera – ketuk layar untuk menjawab');
-        UI.showToast('Kamera tidak ditemukan. Mode sentuh layar aktif.', 5000);
-      } else if (state === 'offline') {
-        UI.setCamHint('Model gesture gagal dimuat – ketuk layar untuk menjawab');
-        UI.showToast('Gagal memuat model gesture (butuh internet). Mode sentuh layar aktif.', 5000);
-      } else if (state === 'cam-busy') {
-        UI.setCamHint('Kamera sedang dipakai aplikasi lain – tutup lalu muat ulang, atau ketuk layar');
-        UI.showToast('Kamera sedang dipakai aplikasi lain. Mode sentuh layar aktif.', 5000);
-      } else if (state === 'insecure') {
-        UI.setCamHint('Kamera butuh halaman https atau localhost – ketuk layar untuk menjawab');
-        UI.showToast('Akses kamera diblokir: buka lewat https:// atau http://localhost. Mode sentuh layar aktif.', 6000);
-      } else {
-        UI.setCamHint('Kamera gagal dibuka: ' + (msg || 'sebab tidak diketahui') + ' – ketuk layar untuk menjawab');
-        UI.showToast('Kamera gagal dibuka. Mode sentuh layar aktif.', 5000);
-      }
+      if (UI.isDiagOpen()) refreshCameraDiag();
     };
 
     Gestures.onNotice = (msg) => {

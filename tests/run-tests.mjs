@@ -502,6 +502,32 @@ console.log('== adaptive quality ==');
   eq(q.changes, 0, 'reset menghapus hitungan perubahan');
 }
 
+console.log('== formatCameraDiag ==');
+{
+  const t = AJ.formatCameraDiag({
+    perm: 'denied',
+    secure: false,
+    local: false,
+    origin: 'http://contoh.test',
+    cams: [{ label: 'Kamera Depan' }, {}],
+    state: 'no-permission',
+    message: 'izin kamera ditolak',
+    error: { name: 'NotAllowedError', message: 'Permission denied' },
+    active: null,
+  });
+  ok(/izin kamera: ditolak \(denied\)/i.test(t), 'menampilkan status izin + kode');
+  ok(/konteks aman: TIDAK/i.test(t), 'menandai konteks tidak aman');
+  ok(/bukan localhost/i.test(t), 'menandai bukan localhost');
+  ok(/kamera terdeteksi: 2/i.test(t), 'menghitung kamera terdeteksi');
+  ok(/Kamera Depan/.test(t) && /\(tanpa nama\)/.test(t), 'menampilkan nama kamera & fallback');
+  ok(/error mentah: NotAllowedError — Permission denied/i.test(t), 'menampilkan error mentah');
+  ok(/status terakhir: no-permission/i.test(t), 'menampilkan status terakhir');
+
+  const empty = AJ.formatCameraDiag({});
+  ok(/error mentah: -/i.test(empty), 'tanpa error tetap aman');
+  ok(/kamera terdeteksi: 0/i.test(empty), 'tanpa kamera tetap aman');
+}
+
 console.log('== finalStandings ==');
 {
   const f = AJ.finalStandings({ 1: 500, 2: 300 }, 10);
